@@ -4,10 +4,12 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from analyzer import NexacryptAnalyzer
 import traceback
+import os
 
+# Initialisation de FastAPI
 app = FastAPI(title="Nexacrypt Analyzer")
 
-# CORS
+# Middleware CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,21 +18,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialisation
+# Initialisation de l'analyseur
 try:
     analyzer = NexacryptAnalyzer()
+    print("✅ Analyseur initialisé avec succès.")
 except Exception as e:
-    # Si l'initialisation échoue (ex: clé API manquante), on crée un analyzer minimal
-    print(f"⚠️ Erreur à l'initialisation : {e}")
+    print(f"❌ Erreur à l'initialisation de l'analyseur : {e}")
+    traceback.print_exc()
     analyzer = None
 
+# Route pour l'analyse
 @app.post("/analyze")
 async def analyze(request: Request):
     try:
         if analyzer is None:
             return JSONResponse(
                 status_code=500,
-                content={"status": "error", "message": "Analyseur non initialisé (clé API manquante ?)"}
+                content={
+                    "status": "error",
+                    "message": "Analyseur non initialisé. Vérifie MISTRAL_API_KEY."
+                }
             )
 
         data = await request.json()
@@ -42,62 +49,24 @@ async def analyze(request: Request):
             "analysis_version": "hybrid_v1"
         })
     except Exception as e:
-        # Retourne TOUJOURS du JSON, même en cas d'erreur
-        print(f"⚠️ Erreur dans /analyze : {e}")
-        traceback.print_exc()  # Affiche la stack trace dans les logs Vercel
+        print(f"❌ Erreur dans /analyze : {e}")
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": str(e)}
+            content={
+                "status": "error",
+                "message": str(e),
+                "type": type(e).__name__
+            }
         )
 
+# Route racine
 @app.get("/")
 async def read_root():
     return JSONResponse(content={"message": "Nexacrypt Analyzer API is running!"})
 
-# Pour Vercel
+# --- Fonction requise par Vercel ---
+# Cette fonction DOIT être au niveau racine du fichier (pas dans une classe ou une fonction)
 def handler(request):
     from vercel_python import VercelRequest
-    return app(VercelRequest(request))from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
-from fastapi.middleware.cors import CORSMiddleware
-from analyzer import NexacryptAnalyzer
-
-app = FastAPI(title="Nexacrypt Analyzer")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialisation
-analyzer = NexacryptAnalyzer()
-
-class InterviewRow(BaseModel):
-    Interview: str
-    Date: str
-    Interviewé: str
-    Locuteur: str
-    Texte: str
-
-class AnalysisRequest(BaseModel):
-    data: List[InterviewRow]
-
-@app.post("/analyze")
-async def analyze(request: AnalysisRequest):
-    # Utilise await car analyze_batch est asynchrone
-    results = await analyzer.analyze_batch([row.dict() for row in request.data])
-
-    return {
-        "status": "success",
-        "processed": len(results),
-        "results": results,
-        "analysis_version": "hybrid_v1"
-    }
-
-@app.get("/")
-def read_root():
-    return {"message": "Nexacrypt Analyzer API is running !"}
+    return app(VercelRequest(request))
