@@ -29,8 +29,9 @@ class AnalysisRequest(BaseModel):
 
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
-    results = analyzer.analyze_batch([row.dict() for row in request.data])
-    
+    # Utilise await car analyze_batch est asynchrone
+    results = await analyzer.analyze_batch([row.dict() for row in request.data])
+
     return {
         "status": "success",
         "processed": len(results),
