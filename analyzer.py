@@ -15,7 +15,7 @@ class NexacryptAnalyzer:
         load_dotenv()
 
         self.rule_based = True
-        self.llm_enabled = False
+        self.llm_enabled = True
 
         # Utilisation des constantes importées
         self.COMPONENTS = COMPONENTS
@@ -60,45 +60,71 @@ class NexacryptAnalyzer:
     # LLM ANALYSIS
     # -----------------------------
     async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
+        """
+        Analyse un texte avec Mistral pour détecter des catégories de risques.
+        Args:
+            text: Texte à analyser.
+            risk_categories: Liste des catégories de risques valides.
+        Returns:
+            Liste des risques détectés (vide si erreur ou aucun risque).
+        """
         if not self.llm_enabled:
             return []
 
         try:
+            # 1. Appel au LLM avec le prompt configuré
             result = await self.risk_chain.ainvoke({
                 "risk_categories": ", ".join(risk_categories),
                 "text": text
             })
 
-            # Normalisation
+            # 2. Normalisation de la réponse du LLM
+            #    - Si result est un dict (ex: {"output": "..."}), extrait la valeur.
+            #    - Sinon, convertit en chaîne de caractères.
             if isinstance(result, dict):
-                result_text = result.get("text") or result.get("output") or ""
+                # Essaye plusieurs clés possibles (selon le format de réponse de Mistral)
+                result_text = (
+                    result.get("output", "") or
+                    result.get("text", "") or
+                    result.get("content", "") or
+                    str(result)
+                )
             else:
                 result_text = str(result)
 
+            # Nettoyage du texte (supprime les espaces et sauts de ligne)
             result_text = result_text.strip()
 
-            if result_text.lower() == "aucun":
+            # 3. Si le LLM répond "Aucun" ou une variante, retourne une liste vide
+            if result_text.lower() in ["aucun", "none", "rien", ""]:
                 return []
 
-            risks = [r.strip() for r in result_text.split(",")]
+            # 4. Séparation des risques (ex: "Risque1, Risque2" → ["Risque1", "Risque2"])
+            risks = [r.strip() for r in result_text.split(",") if r.strip()]
 
+            # 5. Normalisation des catégories pour une comparaison insensible à la casse/espaces
+            #    Ex: "Knowledge Concentration" → "knowledgeconcentration"
             normalized_categories = {
-                c.lower().replace(" ", "").replace("-", "")
+                c.lower().replace(" ", "").replace("-", ""): c  # Conserve la catégorie originale
                 for c in risk_categories
             }
 
+            # 6. Détection des risques valides
             detected = []
             for r in risks:
+                # Normalise le risque détecté (ex: "Knowledge Concentration" → "knowledgeconcentration")
                 key = r.lower().replace(" ", "").replace("-", "")
+                # Si le risque normalisé correspond à une catégorie valide, ajoute-le à la liste
                 if key in normalized_categories:
-                    detected.append(r)
+                    detected.append(normalized_categories[key])  # Utilise le nom original de la catégorie
 
             return detected
 
         except Exception as e:
-            print(f"⚠️ Erreur LLM : {e}")
+            # Log l'erreur pour le débogage (visible dans les logs Vercel)
+            print(f"⚠️ Erreur dans llm_analysis : {e}")
+            # Retourne une liste vide pour éviter de casser l'API
             return []
-
     # -----------------------------
     # HYBRID ANALYSIS
     # -----------------------------
