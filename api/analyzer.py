@@ -54,10 +54,12 @@ class NexacryptAnalyzer:
 
         components = [c for c in self.COMPONENTS if c in text]
 
+
         risks = [
             name for name, patterns in self.RISK_CATEGORIES.items()
-            if any(p in text for p in patterns)
+            if any(self.normalize_text(p) in text for p in patterns)
         ]
+
 
         # Calcul de la sévérité en fonction des risques détectés
         severity = ""
