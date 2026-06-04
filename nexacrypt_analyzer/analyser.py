@@ -7,8 +7,8 @@ from langchain_core.output_parsers import StrOutputParser
 import asyncio
 import unicodedata
 
-from .config.categories import COMPONENTS, RISK_CATEGORIES
-from .config.prompts import RISK_PROMPT
+from config.categories import COMPONENTS, RISK_CATEGORIES
+from config.prompts import RISK_PROMPT
 
 
 class NexacryptAnalyzer:
