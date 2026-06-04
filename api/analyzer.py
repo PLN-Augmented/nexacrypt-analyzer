@@ -6,8 +6,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import asyncio
 
-from config.categories import COMPONENTS, RISK_CATEGORIES
-from config.prompts import RISK_PROMPT
+from .config.categories import COMPONENTS, RISK_CATEGORIES
+from .config.prompts import RISK_PROMPT
 
 
 class NexacryptAnalyzer:
