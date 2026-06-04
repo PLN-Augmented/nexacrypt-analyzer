@@ -32,36 +32,32 @@ class NexacryptAnalyzer:
             self._setup_prompts()
 
 
-
     def normalize_text(self, text: str) -> str:
-        # 1. Nettoyage des échappements JSON
-        text = text.replace('\\"', '"')
-        text = text.replace("\\'", "'")
-        text = text.replace("\\n", " ")
-        text = text.replace("\\r", " ")
-        text = text.replace("\\t", " ")
-        text = text.replace("\\", "")
+        # Nettoyage JSON
+        text = text.encode('utf-8', 'ignore').decode('unicode_escape')
 
-        # 2. Suppression des caractères parasites
-        text = text.replace("________________________________________", " ")
-        text = text.replace("\u2028", " ")
-        text = text.replace("\u2029", " ")
-        text = text.replace("\u2026", " ")
-        text = text.replace("\u00A0", " ")  # espace insécable
-        text = text.replace("\u2018", "'").replace("\u2019", "'")
-        text = text.replace("\u201C", '"').replace("\u201D", '"')
+        # Suppression des caractères invisibles
+        invisibles = [
+            "\u2028", "\u2029", "\u2026", "\u00A0", "\u200B", "\u200C", "\u200D",
+            "\uFEFF", "\uFFFD"
+        ]
+        for inv in invisibles:
+            text = text.replace(inv, " ")
 
-        # 3. Normalisation Unicode
-        text = unicodedata.normalize("NFKD", text)
-
-        # 4. Apostrophes typographiques
+        # Apostrophes typographiques
         text = text.replace("’", "'").replace("‘", "'")
 
-        # 5. Suppression des accents
+        # Guillemets typographiques
+        text = text.replace("“", '"').replace("”", '"')
+
+        # Normalisation Unicode
+        text = unicodedata.normalize("NFKD", text)
+
+        # Suppression des accents
         text = "".join(c for c in text if not unicodedata.combining(c))
 
-        # 6. Mise en minuscules
         return text.lower().strip()
+
 
 
 
@@ -71,6 +67,13 @@ class NexacryptAnalyzer:
     def rule_based_analysis(self, row: Dict) -> Dict:
         raw_text = row.get("Texte", "")
         text = self.normalize_text(raw_text)
+
+        # 🔍 DEBUG : afficher le texte réel reçu et normalisé
+        print("=== RAW ===")
+        print(repr(raw_text))
+        print("=== NORMALIZED ===")
+        print(repr(text))
+        print("========================")
 
         components = [c for c in self.COMPONENTS if c in text]
 
