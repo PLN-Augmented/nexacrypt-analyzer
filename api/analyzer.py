@@ -35,12 +35,21 @@ class NexacryptAnalyzer:
 
     def normalize_text(self, text: str) -> str:
         # 1. Nettoyage des échappements JSON
-        text = text.replace('\\"', '"').replace("\\'", "'").replace("\\", "")
+        text = text.replace('\\"', '"')
+        text = text.replace("\\'", "'")
+        text = text.replace("\\n", " ")
+        text = text.replace("\\r", " ")
+        text = text.replace("\\t", " ")
+        text = text.replace("\\", "")
 
-         # 2. Suppression des caractères parasites (soulignés, séparateurs, unicode invisibles)
-        text = text.replace("________________________________________", "")
-        text = text.replace("\u2028", " ").replace("\u2029", " ").replace("\u2026", " ")
+        # 2. Suppression des caractères parasites
+        text = text.replace("________________________________________", " ")
+        text = text.replace("\u2028", " ")
+        text = text.replace("\u2029", " ")
+        text = text.replace("\u2026", " ")
+        text = text.replace("\u00A0", " ")  # espace insécable
         text = text.replace("\u2018", "'").replace("\u2019", "'")
+        text = text.replace("\u201C", '"').replace("\u201D", '"')
 
         # 3. Normalisation Unicode
         text = unicodedata.normalize("NFKD", text)
