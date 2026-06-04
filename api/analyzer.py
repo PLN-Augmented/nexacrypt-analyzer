@@ -156,15 +156,15 @@ class NexacryptAnalyzer:
     # BATCH ANALYSIS
     # -----------------------------
     async def analyze_batch(self, data):
-    results = []
-    for row in data:
-        try:
-            result = await self.analyze_row(row)
-            results.append(result)
-        except Exception as e:
-            print(f"Erreur dans analyze_row : {e}")
-            results.append({
-                "error": str(e),
-                "row": row
-            })
-    return results
+        results = []
+        for row in data:
+            try:
+                result = await self.analyze_row(row)
+                results.append(result)
+            except Exception as e:
+                print(f"Erreur dans analyze_row : {e}")
+                results.append({
+                    "error": str(e),
+                    "row": row
+                })
+        return results
