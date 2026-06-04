@@ -5,6 +5,7 @@ from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import asyncio
+import unicodedata
 
 from .config.categories import COMPONENTS, RISK_CATEGORIES
 from .config.prompts import RISK_PROMPT
@@ -15,7 +16,7 @@ class NexacryptAnalyzer:
         load_dotenv()
 
         self.rule_based = True
-        self.llm_enabled = True
+        self.llm_enabled = False
 
         # Utilisation des constantes importées
         self.COMPONENTS = COMPONENTS
@@ -30,11 +31,26 @@ class NexacryptAnalyzer:
             self.llm = ChatMistralAI(api_key=api_key, model="mistral-tiny")
             self._setup_prompts()
 
+
+    def normalize_text(self, text: str) -> str:
+        # Normalisation Unicode (NFKD = décomposition)
+        text = unicodedata.normalize("NFKD", text)
+
+        # Remplacement des apostrophes typographiques
+        text = text.replace("’", "'").replace("‘", "'")
+
+        # Suppression des accents
+        text = "".join(c for c in text if not unicodedata.combining(c))
+
+        # Mise en minuscules
+        return text.lower()
+
     # -----------------------------
     # RULE-BASED ANALYSIS
     # -----------------------------
     def rule_based_analysis(self, row: Dict) -> Dict:
-        text = row.get("Texte", "").lower()
+        raw_text = row.get("Texte", "")
+        text = self.normalize_text(raw_text)
 
         components = [c for c in self.COMPONENTS if c in text]
 
