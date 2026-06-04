@@ -7,7 +7,7 @@ from config.prompts import RISK_PROMPT_TEMPLATE
 import os
 import traceback
 from typing import List, Dict
-from langchain_mistralai import MistralAI  # ✅ Note le underscore (_) entre langchain et mistralai
+from langchain_mistralai import ChatMistralAI  # ✅ Note le underscore (_) entre langchain et mistralai
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -35,7 +35,7 @@ class NexacryptAnalyzer:
 
         if self.llm_enabled:
             try:
-                self.llm = MistralAI(api_key=MISTRAL_API_KEY, model="mistral-tiny")
+                self.llm = ChatMistralAI(api_key=MISTRAL_API_KEY, model="mistral-tiny")
                 self._setup_prompts()
                 print("✅ LLM initialisé avec succès.")
             except Exception as e:
