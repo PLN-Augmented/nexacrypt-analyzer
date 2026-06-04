@@ -59,10 +59,20 @@ class NexacryptAnalyzer:
             if any(p in text for p in patterns)
         ]
 
+        # Calcul de la sévérité en fonction des risques détectés
+        severity = ""
+        if risks:
+            if "Security Risk" in risks:
+                severity = "high"
+            elif "Backup Risk" in risks:
+                severity = "medium"
+            else:
+                severity = "low"
+
         return {
             "components": components,
             "risks_rule": risks,
-            "severity_rule": "HIGH" if risks else "MEDIUM"
+            "severity_rule": severity
         }
 
     # -----------------------------
