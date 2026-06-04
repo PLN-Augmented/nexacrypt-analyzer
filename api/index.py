@@ -2,10 +2,13 @@
 import sys
 import os
 
-# Ajoute le dossier parent au PYTHONPATH pour que Vercel trouve nexacrypt_analyzer
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ajoute le dossier racine au PYTHONPATH
+# On remonte de deux niveaux depuis api/index.py pour atteindre la racine
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
 
-# Import de l'application FastAPI depuis nexacrypt_analyzer
+# Maintenant, on peut importer nexacrypt_analyzer
 from nexacrypt_analyzer.main import app as fastapi_app
 
 # Fonction handler requise par Vercel
