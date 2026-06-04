@@ -32,18 +32,22 @@ class NexacryptAnalyzer:
             self._setup_prompts()
 
 
+
     def normalize_text(self, text: str) -> str:
-        # Normalisation Unicode (NFKD = décomposition)
+        # Nettoyage des échappements JSON
+        text = text.replace('\\"', '"').replace("\\'", "'").replace("\\", "")
+
+        # Normalisation Unicode
         text = unicodedata.normalize("NFKD", text)
 
-        # Remplacement des apostrophes typographiques
+        # Apostrophes typographiques
         text = text.replace("’", "'").replace("‘", "'")
 
         # Suppression des accents
         text = "".join(c for c in text if not unicodedata.combining(c))
 
-        # Mise en minuscules
         return text.lower()
+
 
     # -----------------------------
     # RULE-BASED ANALYSIS
