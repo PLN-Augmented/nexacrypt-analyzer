@@ -142,15 +142,10 @@ except Exception as e:
     analyzer = None
 
 # --- Routes FastAPI ---
-@app.post("/analyze")
+@app.post("/analyze")  # ← Décorateur pour la méthode POST
 async def analyze(request: Request):
     try:
-        if analyzer is None:
-            return JSONResponse(
-                status_code=500,
-                content={"status": "error", "message": "Analyseur non initialisé"}
-            )
-
+        # Ton code ici
         data = await request.json()
         results = await analyzer.analyze_batch([row for row in data.get("data", [])])
         return JSONResponse(content={
@@ -160,8 +155,6 @@ async def analyze(request: Request):
             "analysis_version": "hybrid_v1"
         })
     except Exception as e:
-        print(f"❌ Erreur dans /analyze : {e}")
-        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": str(e)}
