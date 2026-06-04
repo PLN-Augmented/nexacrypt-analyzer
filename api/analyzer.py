@@ -34,19 +34,26 @@ class NexacryptAnalyzer:
 
 
     def normalize_text(self, text: str) -> str:
-        # Nettoyage des échappements JSON
+        # 1. Nettoyage des échappements JSON
         text = text.replace('\\"', '"').replace("\\'", "'").replace("\\", "")
 
-        # Normalisation Unicode
+         # 2. Suppression des caractères parasites (soulignés, séparateurs, unicode invisibles)
+        text = text.replace("________________________________________", "")
+        text = text.replace("\u2028", " ").replace("\u2029", " ").replace("\u2026", " ")
+        text = text.replace("\u2018", "'").replace("\u2019", "'")
+
+        # 3. Normalisation Unicode
         text = unicodedata.normalize("NFKD", text)
 
-        # Apostrophes typographiques
+        # 4. Apostrophes typographiques
         text = text.replace("’", "'").replace("‘", "'")
 
-        # Suppression des accents
+        # 5. Suppression des accents
         text = "".join(c for c in text if not unicodedata.combining(c))
 
-        return text.lower()
+        # 6. Mise en minuscules
+        return text.lower().strip()
+
 
 
     # -----------------------------
