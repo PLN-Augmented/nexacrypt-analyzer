@@ -1,5 +1,4 @@
 # config/prompts.py
-
 # Définis RISK_PROMPT_TEMPLATE au niveau racine (pas dans une fonction/classe)
 RISK_PROMPT_TEMPLATE = """
 Tu es un expert en analyse de risques techniques.
