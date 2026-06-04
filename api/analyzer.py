@@ -162,7 +162,9 @@ class NexacryptAnalyzer:
                 result = await self.analyze_row(row)
                 results.append(result)
             except Exception as e:
-                print(f"Erreur dans analyze_row : {e}")
+                print("🔥 ERREUR analyze_row :", e)
+                import traceback
+                traceback.print_exc()
                 results.append({
                     "error": str(e),
                     "row": row
