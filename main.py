@@ -7,7 +7,7 @@ from config.prompts import RISK_PROMPT_TEMPLATE
 import os
 import traceback
 from typing import List, Dict
-from langchain.mistralai import MistralAI
+from langchain_mistralai import MistralAI  # ✅ Note le underscore (_) entre langchain et mistralai
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
