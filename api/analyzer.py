@@ -15,7 +15,7 @@ class NexacryptAnalyzer:
         load_dotenv()
 
         self.rule_based = True
-        self.llm_enabled = False
+        self.llm_enabled = True
 
         # Utilisation des constantes importées
         self.COMPONENTS = COMPONENTS
