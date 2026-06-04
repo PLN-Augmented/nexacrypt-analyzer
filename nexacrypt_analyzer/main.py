@@ -2,7 +2,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .analyzer import NexacryptAnalyzer
+from analyzer import NexacryptAnalyzer
 from mangum import Mangum
 import traceback
 
