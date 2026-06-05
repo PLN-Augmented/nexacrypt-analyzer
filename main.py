@@ -109,7 +109,7 @@ class NexacryptAnalyzer:
         }
     # --- Analyse LLM ---
     async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
-        logger.info(f"🔍 Texte à analyser par LLM: {text[:50]}...")
+        logger.info(f"🔍 Texte à analyser par LLM: {text[:100]}...")
         if not self.llm_enabled:
             logger.warning("⚠️ LLM désactivé, analyse annulée.")
             return []
@@ -139,25 +139,28 @@ class NexacryptAnalyzer:
                 logger.info("✅ Aucun risque détecté par le LLM.")
                 return []
 
-            # Parsing amélioré : cherche des mots-clés dans la réponse du LLM
+            # Parsing amélioré : cherche chaque catégorie dans la réponse
             detected_risks = []
-            for category, patterns in self.RISK_CATEGORIES.items():
-                for pattern in patterns:
-                    if self.normalize_text(pattern) in result_text:
-                        detected_risks.append(category)
-                        break  # Évite les doublons pour une même catégorie
+            for category in risk_categories:
+                # Normalise la catégorie pour la comparaison (ex: "Knowledge Concentration" → "knowledgeconcentration")
+                normalized_category = self.normalize_text(category)
+                # Cherche la catégorie normalisée dans le texte normalisé
+                if normalized_category in result_text:
+                    detected_risks.append(category)
 
-            # Si aucun risque n'est détecté, utilise une valeur par défaut
             if not detected_risks:
                 detected_risks = ["Inconnu"]
+                logger.warning("⚠️ AUCUN RISQUE DÉTECTÉ PAR LLM !")
 
             logger.info(f"🎯 Risques détectés par LLM: {detected_risks}")
             return detected_risks
 
         except Exception as e:
             logger.error(f"❌ Erreur dans llm_analysis: {e}")
+            import traceback
+            traceback.print_exc()
             return ["Erreur LLM"]
-
+            
     # --- Analyse hybride (règles + LLM) ---
     async def analyze_row(self, row: Dict) -> Dict:
         text = row.get("Texte", "")
@@ -167,25 +170,25 @@ class NexacryptAnalyzer:
         rule_risks = rule_result["risks_rule"]
         logger.info(f"📌 Risques (règles): {rule_risks}")
 
-        # Utilise le LLM si :
-        # - Le LLM est activé ET
-        # - (Aucun risque détecté par les règles OU le texte est long)
         use_llm = self.llm_enabled and (not rule_risks or len(text.split()) > 20)
+        logger.info(f"USE_LLM ? {use_llm} (LLM enabled: {self.llm_enabled}, rule_risks: {bool(rule_risks)})")
 
         if use_llm:
             llm_risks = await self.llm_analysis(text, list(self.RISK_CATEGORIES.keys()))
             all_risks = list(set(rule_risks + llm_risks))  # Combine règles + LLM
             method = "hybrid"
+            logger.info(f"Risques hybrides: {all_risks}")
         else:
             all_risks = rule_risks
             method = "rule-based"
+            logger.info(f"Risques (règles uniquement): {all_risks}")
 
         # Force un risque par défaut si vide
         if not all_risks:
             all_risks = ["Inconnu"]
             logger.warning("⚠️ Aucun risque détecté, valeur par défaut appliquée.")
 
-        # Calcul de la sévérité en fonction de TOUS les risques (règles + LLM)
+        # Calcul de la sévérité en fonction de TOUS les risques
         severity = "HIGH"
         if "Security Risk" in all_risks:
             severity = "HIGH"
@@ -193,17 +196,16 @@ class NexacryptAnalyzer:
             severity = "MEDIUM"
         elif all_risks:  # Si des risques sont détectés (même sans Security/Backup)
             severity = "LOW"
-        else:
-            severity = "LOW"  # Valeur par défaut
 
         return {
             **row,
             "components": rule_result["components"],
             "risks": all_risks,
-            "severity": severity,  # ← Utilise la sévérité calculée sur tous les risques
+            "severity": severity,
             "analysis_type": method,
             "note": f"Analyse {method}"
         }
+    
     # --- Analyse par lots ---
     async def analyze_batch(self, data: List[Dict]) -> List[Dict]:
         results = []
