@@ -4,17 +4,21 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from config.categories import COMPONENTS, RISK_CATEGORIES
 from config.prompts import RISK_PROMPT_TEMPLATE
-import os
-import traceback
-from typing import List, Dict
-from langchain_mistralai import ChatMistralAI  # ✅ Note le underscore (_) entre langchain et mistralai
+from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+import os
+import logging
+from typing import List, Dict
+
+# --- Configuration des logs ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- Initialisation de FastAPI ---
 app = FastAPI(title="Nexacrypt Analyzer")
 
-# Middleware CORS
+# Middleware CORS (obligatoire pour Vercel)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,9 +27,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Classe NexacryptAnalyzer (anciennement dans analyzer.py) ---
+# --- Classe NexacryptAnalyzer (intégrée directement) ---
 class NexacryptAnalyzer:
     def __init__(self):
+        logger.info("🔍 Initialisation de NexacryptAnalyzer...")
         self.rule_based = True
         MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
         self.llm_enabled = MISTRAL_API_KEY is not None and MISTRAL_API_KEY != ""
@@ -37,12 +42,12 @@ class NexacryptAnalyzer:
             try:
                 self.llm = ChatMistralAI(api_key=MISTRAL_API_KEY, model="mistral-tiny")
                 self._setup_prompts()
-                print("✅ LLM initialisé avec succès.")
+                logger.info("✅ LLM initialisé avec succès.")
             except Exception as e:
-                print(f"❌ Erreur à l'initialisation du LLM : {e}")
+                logger.error(f"❌ Erreur LLM: {e}")
                 self.llm_enabled = False
         else:
-            print("⚠️ LLM désactivé (clé API manquante).")
+            logger.warning("⚠️ LLM désactivé (clé API manquante).")
 
     def _setup_prompts(self):
         self.risk_prompt = ChatPromptTemplate.from_template(RISK_PROMPT_TEMPLATE)
@@ -62,7 +67,9 @@ class NexacryptAnalyzer:
         }
 
     async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
+        logger.info(f"🔍 Texte à analyser: {text[:50]}...")
         if not self.llm_enabled:
+            logger.warning("⚠️ LLM désactivé, analyse annulée.")
             return []
 
         try:
@@ -70,7 +77,9 @@ class NexacryptAnalyzer:
                 "risk_categories": ", ".join(risk_categories),
                 "text": text
             })
+            logger.info(f"🤖 Réponse brute du LLM: {result}")
 
+            # Parsing robuste
             if isinstance(result, dict):
                 result_text = (
                     result.get("output", "") or
@@ -82,33 +91,35 @@ class NexacryptAnalyzer:
                 result_text = str(result)
 
             result_text = result_text.strip()
+            logger.info(f"📝 Texte extrait: {result_text}")
 
             if result_text.lower() in ["aucun", "none", "rien", ""]:
+                logger.info("✅ Aucun risque détecté.")
                 return []
 
-            risks = [r.strip() for r in result_text.split(",") if r.strip()]
+            # Parsing manuel des risques
+            detected_risks = []
+            for category in risk_categories:
+                if category.lower() in result_text.lower():
+                    detected_risks.append(category)
 
-            normalized_categories = {
-                c.lower().replace(" ", "").replace("-", ""): c
-                for c in risk_categories
-            }
+            if not detected_risks:
+                detected_risks = ["Inconnu"]
 
-            detected = []
-            for r in risks:
-                key = r.lower().replace(" ", "").replace("-", "")
-                if key in normalized_categories:
-                    detected.append(normalized_categories[key])
-
-            return detected
+            logger.info(f"🎯 Risques détectés: {detected_risks}")
+            return detected_risks
 
         except Exception as e:
-            print(f"⚠️ Erreur dans llm_analysis : {e}")
-            return []
+            logger.error(f"❌ Erreur dans llm_analysis: {e}")
+            return ["Erreur LLM"]
 
     async def analyze_row(self, row: Dict) -> Dict:
         text = row.get("Texte", "")
+        logger.info(f"📄 Analyse de la ligne: {row.get('Interview', 'N/A')}")
+
         rule_result = self.rule_based_analysis(row)
         rule_risks = rule_result["risks_rule"]
+        logger.info(f"📌 Risques (règles): {rule_risks}")
 
         use_llm = self.llm_enabled and (not rule_risks or len(text.split()) > 20)
 
@@ -120,13 +131,18 @@ class NexacryptAnalyzer:
             all_risks = rule_risks
             method = "rule-based"
 
+        # Force un risque par défaut si vide
+        if not all_risks:
+            all_risks = ["Inconnu"]
+            logger.warning("⚠️ Aucun risque détecté, valeur par défaut appliquée.")
+
         return {
             **row,
             "components": rule_result["components"],
             "risks": all_risks,
-            "severity": "HIGH" if all_risks else "MEDIUM",
+            "severity": "HIGH" if "HIGH" in [r for r in all_risks if r in self.RISK_CATEGORIES] else "MEDIUM",
             "analysis_type": method,
-            "note": "Analyse hybride (règles + LLM)" if use_llm else "Analyse par règles"
+            "note": f"Analyse {method}"
         }
 
     async def analyze_batch(self, data: List[Dict]) -> List[Dict]:
@@ -135,19 +151,31 @@ class NexacryptAnalyzer:
 # --- Initialisation de l'analyseur ---
 try:
     analyzer = NexacryptAnalyzer()
-    print("✅ Analyseur initialisé avec succès.")
+    logger.info("✅ Analyseur initialisé avec succès.")
 except Exception as e:
-    print(f"❌ Erreur à l'initialisation : {e}")
-    traceback.print_exc()
+    logger.error(f"❌ Erreur à l'initialisation: {e}")
     analyzer = None
 
 # --- Routes FastAPI ---
-@app.post("/analyze")  # ← Décorateur pour la méthode POST
+@app.get("/")
+async def read_root():
+    return JSONResponse(content={"message": "Nexacrypt Analyzer API is running!"})
+
+@app.post("/analyze")
 async def analyze(request: Request):
     try:
-        # Ton code ici
         data = await request.json()
+        logger.info(f"📥 Données reçues: {data}")
+
+        if analyzer is None:
+            logger.error("❌ Analyseur non initialisé!")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": "Analyseur non initialisé"}
+            )
+
         results = await analyzer.analyze_batch([row for row in data.get("data", [])])
+        logger.info(f"📤 Résultats: {len(results)} lignes traitées.")
         return JSONResponse(content={
             "status": "success",
             "processed": len(results),
@@ -155,19 +183,13 @@ async def analyze(request: Request):
             "analysis_version": "hybrid_v1"
         })
     except Exception as e:
+        logger.error(f"❌ Erreur dans /analyze: {e}")
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": str(e)}
         )
 
-@app.get("/")
-async def read_root():
-    return JSONResponse(content={"message": "Nexacrypt Analyzer API is running!"})
-
 # --- Fonction handler pour Vercel ---
 def handler(request):
     from vercel_python import VercelRequest
     return app(VercelRequest(request))
-
-# Pour Vercel (variable `app` requise)
-app = FastAPI(title="Nexacrypt Analyzer")  # Déjà défini plus haut, mais on le réassigne ici pour Vercel
