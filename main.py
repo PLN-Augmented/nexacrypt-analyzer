@@ -1,4 +1,5 @@
 # main.py
+import time
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,17 +11,16 @@ from langchain_core.output_parsers import StrOutputParser
 import os
 import logging
 import unicodedata
-import time
 from typing import List, Dict
 
 # --- Configuration des logs ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Initialisation de FastAPI (au niveau racine) ---
+# --- Initialisation de FastAPI ---
 app = FastAPI(title="Nexacrypt Analyzer")
 
-# Middleware CORS
+# Middleware CORS (obligatoire pour Vercel)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Classe NexacryptAnalyzer ---
+# --- Classe NexacryptAnalyzer (avec normalize_text) ---
 class NexacryptAnalyzer:
     def __init__(self):
         logger.info("🔍 Initialisation de NexacryptAnalyzer...")
@@ -51,37 +51,64 @@ class NexacryptAnalyzer:
         else:
             logger.warning("⚠️ LLM désactivé (clé API manquante).")
 
+    # --- Méthode normalize_text (ton code original) ---
     def normalize_text(self, text: str) -> str:
+        """Nettoie et normalise un texte pour une comparaison robuste."""
         if not text:
             return ""
+
+        # Nettoyage JSON
         text = text.encode('utf-8', 'ignore').decode('unicode_escape')
-        invisibles = ["\u2028", "\u2029", "\u2026", "\u00A0", "\u200B", "\u200C", "\u200D", "\uFEFF", "\uFFFD"]
+
+        # Suppression des caractères invisibles
+        invisibles = [
+            "\u2028", "\u2029", "\u2026", "\u00A0", "\u200B", "\u200C", "\u200D",
+            "\uFEFF", "\uFFFD"
+        ]
         for inv in invisibles:
             text = text.replace(inv, " ")
-        text = text.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+
+        # Apostrophes typographiques
+        text = text.replace("’", "'").replace("‘", "'")
+
+        # Guillemets typographiques
+        text = text.replace("“", '"').replace("”", '"')
+
+        # Normalisation Unicode
         text = unicodedata.normalize("NFKD", text)
+
+        # Suppression des accents
         text = "".join(c for c in text if not unicodedata.combining(c))
+
         return text.lower().strip()
 
+    # --- Setup des prompts LLM ---
     def _setup_prompts(self):
         self.risk_prompt = ChatPromptTemplate.from_template(RISK_PROMPT_TEMPLATE)
         self.risk_chain = self.risk_prompt | self.llm | StrOutputParser()
 
+    # --- Analyse basée sur des règles ---
     def rule_based_analysis(self, row: Dict) -> Dict:
         raw_text = row.get("Texte", "")
         text = self.normalize_text(raw_text)
+
         components = [c for c in self.COMPONENTS if c in text]
+
+        # Applique normalize_text à chaque pattern pour une comparaison cohérente
         risks = [
             name for name, patterns in self.RISK_CATEGORIES.items()
             if any(self.normalize_text(p) in text for p in patterns)
         ]
-        severity = "HIGH" if "Security Risk" in risks else "MEDIUM" if "Backup Risk" in risks else "LOW"
+
+        # Calcul de la sévérité (toujours une valeur)
+        severity = "HIGH" if "Security Risk" in risks else "MEDIUM" if "Backup Risk" in risks else "LOW" if risks else "LOW"
+
         return {
             "components": components,
             "risks_rule": risks,
             "severity_rule": severity
         }
-
+    # --- Analyse LLM ---
     async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
         logger.info(f"🔍 Texte à analyser par LLM: {text[:100]}...")
         if not self.llm_enabled:
@@ -95,6 +122,7 @@ class NexacryptAnalyzer:
             })
             logger.info(f"🤖 Réponse brute du LLM: {result}")
 
+            # Parsing robuste
             if isinstance(result, dict):
                 result_text = (
                     result.get("output", "") or
@@ -112,9 +140,13 @@ class NexacryptAnalyzer:
                 logger.info("✅ Aucun risque détecté par le LLM.")
                 return []
 
+            # Parsing amélioré : cherche chaque catégorie dans la réponse
             detected_risks = []
             for category in risk_categories:
-                if self.normalize_text(category) in result_text:
+                # Normalise la catégorie pour la comparaison (ex: "Knowledge Concentration" → "knowledgeconcentration")
+                normalized_category = self.normalize_text(category)
+                # Cherche la catégorie normalisée dans le texte normalisé
+                if normalized_category in result_text:
                     detected_risks.append(category)
 
             if not detected_risks:
@@ -126,8 +158,11 @@ class NexacryptAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Erreur dans llm_analysis: {e}")
+            import traceback
+            traceback.print_exc()
             return ["Erreur LLM"]
-
+            
+    # --- Analyse hybride (règles + LLM) ---
     async def analyze_row(self, row: Dict) -> Dict:
         text = row.get("Texte", "")
         logger.info(f"📄 Analyse de la ligne: {row.get('Interview', 'N/A')}")
@@ -144,26 +179,28 @@ class NexacryptAnalyzer:
             llm_risks = await self.llm_analysis(text, list(self.RISK_CATEGORIES.keys()))
             logger.info(f"🎯 Risques (LLM): {llm_risks}")
 
-        all_risks = list(set(rule_risks + llm_risks))
+        all_risks = list(set(rule_risks + llm_risks))  # Combinaison hybride
         method = "hybrid" if use_llm else "rule-based"
 
         if not all_risks:
             all_risks = ["Inconnu"]
             logger.warning("⚠️ Aucun risque détecté, valeur par défaut appliquée.")
 
+        # Calcul de la sévérité (basée sur tous les risques)
         severity = "HIGH" if "Security Risk" in all_risks else "MEDIUM" if "Backup Risk" in all_risks else "LOW"
 
         return {
             **row,
             "components": rule_result["components"],
-            "risks": all_risks,
-            "risks_rule": rule_risks,
-            "risks_llm": llm_risks,
+            "risks": all_risks,  # ← Tous les risques combinés
+            "risks_rule": rule_risks,  # ←  Risques détectés par les règles
+            "risks_llm": llm_risks,  # ←  Risques détectés par le LLM
             "severity": severity,
             "analysis_type": method,
             "note": f"Analyse {method}"
         }
-
+    
+    # --- Analyse par lots ---
     async def analyze_batch(self, data: List[Dict]) -> List[Dict]:
         results = []
         for row in data:
@@ -177,15 +214,13 @@ class NexacryptAnalyzer:
                     "error": str(e),
                     "components": [],
                     "risks": ["Erreur"],
-                    "risks_rule": [],
-                    "risks_llm": [],
                     "severity": "HIGH",
                     "analysis_type": "error",
                     "note": f"Erreur: {str(e)}"
                 })
         return results
 
-# --- Initialisation de l'analyseur (au niveau racine) ---
+# --- Initialisation de l'analyseur ---
 try:
     analyzer = NexacryptAnalyzer()
     logger.info("✅ Analyseur initialisé avec succès.")
@@ -193,23 +228,14 @@ except Exception as e:
     logger.error(f"❌ Erreur à l'initialisation: {e}")
     analyzer = None
 
-# --- Routes FastAPI (au niveau racine) ---
-@app.get("/")
-async def read_root():
-    return JSONResponse(content={"message": "Nexacrypt Analyzer API is running!"})
-
+# --- Routes FastAPI ---
 @app.post("/analyze")
 async def analyze(request: Request):
-    start_time = time.time()
+    start_time = time.time()  # ← Début du chronométrage
+
     try:
         data = await request.json()
-        logger.info(f"📥 Données reçues: {data}")
-
-        # --- Gestion des deux formats d'input ---
-        if "data" in data and isinstance(data.get("data"), list):
-            input_data = data["data"]
-        else:
-            input_data = [data]  # Transforme en liste si c'est un seul dictionnaire
+        logger.info(f"📥 Données reçues: {len(data.get('data', []))} lignes")
 
         if analyzer is None:
             logger.error("❌ Analyseur non initialisé!")
@@ -218,8 +244,9 @@ async def analyze(request: Request):
                 content={"status": "error", "message": "Analyseur non initialisé"}
             )
 
-        results = await analyzer.analyze_batch(input_data)
-        duration = time.time() - start_time
+        results = await analyzer.analyze_batch(data.get("data", []))
+        duration = time.time() - start_time  # ← Calcul de la durée
+
         logger.info(f"⏱️ Temps d'exécution: {duration:.2f}s pour {len(results)} lignes")
 
         return JSONResponse(content={
@@ -227,24 +254,20 @@ async def analyze(request: Request):
             "processed": len(results),
             "results": results,
             "analysis_version": "hybrid_v1",
-            "performance": {
+            "performance": {  # ← Ajoute les métriques ici
                 "duration_seconds": duration,
-                "lines_processed": len(results)
+                "lines_processed": len(results),
+                "avg_time_per_line": duration / len(results) if results else 0
             }
         })
 
     except Exception as e:
         logger.error(f"❌ Erreur dans /analyze: {e}")
-        import traceback
-        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": str(e)}
         )
-
-# --- Handler pour Vercel (au niveau racine) ---
-# IMPORTANT: Utilise un import statique pour éviter les erreurs Vercel
-from vercel import VercelRequest
-
+# --- Fonction handler pour Vercel ---
 def handler(request):
-    return app(VercelRequest(request))
+    from vercel import VercelRequest
+    return app(VercelRequest(request)) 
