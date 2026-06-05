@@ -172,36 +172,29 @@ class NexacryptAnalyzer:
         logger.info(f"📌 Risques (règles): {rule_risks}")
 
         use_llm = self.llm_enabled and (not rule_risks or len(text.split()) > 20)
-        logger.info(f"USE_LLM ? {use_llm} (LLM enabled: {self.llm_enabled}, rule_risks: {bool(rule_risks)})")
+        logger.info(f"USE_LLM ? {use_llm}")
 
+        llm_risks = []
         if use_llm:
             llm_risks = await self.llm_analysis(text, list(self.RISK_CATEGORIES.keys()))
-            all_risks = list(set(rule_risks + llm_risks))  # Combine règles + LLM
-            method = "hybrid"
-            logger.info(f"Risques hybrides: {all_risks}")
-        else:
-            all_risks = rule_risks
-            method = "rule-based"
-            logger.info(f"Risques (règles uniquement): {all_risks}")
+            logger.info(f"🎯 Risques (LLM): {llm_risks}")
 
-        # Force un risque par défaut si vide
+        all_risks = list(set(rule_risks + llm_risks))  # Combinaison hybride
+        method = "hybrid" if use_llm else "rule-based"
+
         if not all_risks:
             all_risks = ["Inconnu"]
             logger.warning("⚠️ Aucun risque détecté, valeur par défaut appliquée.")
 
-        # Calcul de la sévérité en fonction de TOUS les risques
-        severity = "HIGH"
-        if "Security Risk" in all_risks:
-            severity = "HIGH"
-        elif "Backup Risk" in all_risks:
-            severity = "MEDIUM"
-        elif all_risks:  # Si des risques sont détectés (même sans Security/Backup)
-            severity = "LOW"
+        # Calcul de la sévérité (basée sur tous les risques)
+        severity = "HIGH" if "Security Risk" in all_risks else "MEDIUM" if "Backup Risk" in all_risks else "LOW"
 
         return {
             **row,
             "components": rule_result["components"],
-            "risks": all_risks,
+            "risks": all_risks,  # ← Tous les risques combinés
+            "risks_rule": rule_risks,  # ←  Risques détectés par les règles
+            "risks_llm": llm_risks,  # ←  Risques détectés par le LLM
             "severity": severity,
             "analysis_type": method,
             "note": f"Analyse {method}"
