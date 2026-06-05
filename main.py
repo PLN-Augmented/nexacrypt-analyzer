@@ -91,31 +91,22 @@ class NexacryptAnalyzer:
         raw_text = row.get("Texte", "")
         text = self.normalize_text(raw_text)
 
-        # Debug : afficher le texte normalisé (optionnel)
-        logger.info(f"📄 Texte normalisé: {text[:50]}...")
-
         components = [c for c in self.COMPONENTS if c in text]
+
+        # Applique normalize_text à chaque pattern pour une comparaison cohérente
         risks = [
             name for name, patterns in self.RISK_CATEGORIES.items()
             if any(self.normalize_text(p) in text for p in patterns)
         ]
 
-        # Calcul de la sévérité
-        severity = ""
-        if risks:
-            if "Security Risk" in risks:
-                severity = "HIGH"
-            elif "Backup Risk" in risks:
-                severity = "MEDIUM"
-            else:
-                severity = "LOW"
+        # Calcul de la sévérité (toujours une valeur)
+        severity = "HIGH" if "Security Risk" in risks else "MEDIUM" if "Backup Risk" in risks else "LOW" if risks else "LOW"
 
         return {
             "components": components,
             "risks_rule": risks,
             "severity_rule": severity
         }
-
     # --- Analyse LLM ---
     async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
         logger.info(f"🔍 Texte à analyser par LLM: {text[:50]}...")
@@ -141,19 +132,22 @@ class NexacryptAnalyzer:
             else:
                 result_text = str(result)
 
-            result_text = result_text.strip()
+            result_text = result_text.strip().lower()
             logger.info(f"📝 Texte extrait: {result_text}")
 
-            if result_text.lower() in ["aucun", "none", "rien", ""]:
+            if result_text in ["aucun", "none", "rien", ""]:
                 logger.info("✅ Aucun risque détecté par le LLM.")
                 return []
 
-            # Parsing manuel des risques
+            # Parsing amélioré : cherche des mots-clés dans la réponse du LLM
             detected_risks = []
-            for category in risk_categories:
-                if category.lower() in result_text.lower():
-                    detected_risks.append(category)
+            for category, patterns in self.RISK_CATEGORIES.items():
+                for pattern in patterns:
+                    if self.normalize_text(pattern) in result_text:
+                        detected_risks.append(category)
+                        break  # Évite les doublons pour une même catégorie
 
+            # Si aucun risque n'est détecté, utilise une valeur par défaut
             if not detected_risks:
                 detected_risks = ["Inconnu"]
 
@@ -173,11 +167,14 @@ class NexacryptAnalyzer:
         rule_risks = rule_result["risks_rule"]
         logger.info(f"📌 Risques (règles): {rule_risks}")
 
+        # Utilise le LLM si :
+        # - Le LLM est activé ET
+        # - (Aucun risque détecté par les règles OU le texte est long)
         use_llm = self.llm_enabled and (not rule_risks or len(text.split()) > 20)
 
         if use_llm:
             llm_risks = await self.llm_analysis(text, list(self.RISK_CATEGORIES.keys()))
-            all_risks = list(set(rule_risks + llm_risks))
+            all_risks = list(set(rule_risks + llm_risks))  # Combine règles + LLM
             method = "hybrid"
         else:
             all_risks = rule_risks
@@ -188,15 +185,25 @@ class NexacryptAnalyzer:
             all_risks = ["Inconnu"]
             logger.warning("⚠️ Aucun risque détecté, valeur par défaut appliquée.")
 
+        # Calcul de la sévérité en fonction de TOUS les risques (règles + LLM)
+        severity = "HIGH"
+        if "Security Risk" in all_risks:
+            severity = "HIGH"
+        elif "Backup Risk" in all_risks:
+            severity = "MEDIUM"
+        elif all_risks:  # Si des risques sont détectés (même sans Security/Backup)
+            severity = "LOW"
+        else:
+            severity = "LOW"  # Valeur par défaut
+
         return {
             **row,
             "components": rule_result["components"],
             "risks": all_risks,
-            "severity": rule_result["severity_rule"] if rule_result["severity_rule"] else "MEDIUM",
+            "severity": severity,  # ← Utilise la sévérité calculée sur tous les risques
             "analysis_type": method,
             "note": f"Analyse {method}"
         }
-
     # --- Analyse par lots ---
     async def analyze_batch(self, data: List[Dict]) -> List[Dict]:
         results = []
