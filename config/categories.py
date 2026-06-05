@@ -1,43 +1,27 @@
 # config/categories.py
+COMPONENTS = ["soulcrypt", "soulbleed", "serveurs", "sauvegardes", "monitoring", "dex", "dat", "raid", "openssl"]
 
-# Composants techniques
-COMPONENTS = [
-    "soulcrypt", "soulbleed", "serveurs", "sauvegardes", "monitoring",
-    "dex", "dat", "raid", "openssl"
-]
-
-# Catégories de risques et leurs mots-clés
 RISK_CATEGORIES = {
     "Knowledge Concentration": [
-        "seul",
-        "seule",
-        "personne d'autre",
-        "irremplacable",
-        "spof"
+        "seule", "seul", "dans ma tête", "personne d'autre", "irremplaçable", "spof",
+        "personne", "connaît", "comprendre", "complexe", "peur de casser", "annuler la mise en prod",
+        "touché", "touchée", "évolutions", "toutes les évolutions", "5 ans", "conçu il y a"
     ],
     "Documentation Gap": [
-        "pas documente",
-        "incomplet",
-        "obsolete",
-        "readme",
-        "wiki",
-        "pas dans le repo",
-        "pas partage"
+        "pas documenté", "incomplet", "obsolète", "readme", "wiki", "repo partagé",
+        "stocké sur son poste local", "pas dans le repo", "scripts de récupération", "poste local"
     ],
     "Backup Risk": [
-        "sauvegarde",
-        "restauration",
-        "jamais teste",
-        "jamais ete teste",
-        "jamais ete testee"
+        "sauvegarde", "restauration", "jamais testé", "backup", "backups", "corrompues",
+        "45 minutes", "démarrer", "SLA", "High", "serveurs dédiés", "2 en prod", "1 en backup",
+        "matériel vieux", "disques", "fatigue", "si les 2 serveurs prod tombent"
     ],
     "Security Risk": [
-        "vulnerabilite",
-        "faille",
-        "heartbleed"
+        "vulnérabilité", "faille", "heartbleed", "chiffrement", "sécurité", "compromis",
+        "sensibles", "soulcrypt", "soulbleed"
     ],
     "Governance Risk": [
-        "pas de budget",
-        "pas de plan"
+        "pas de budget", "pas de plan", "astreintes", "part en retraite", "seul à connaître",
+        "Dave", "retraite", "3 mois", "après son départ"
     ]
 }
