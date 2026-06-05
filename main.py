@@ -231,11 +231,17 @@ except Exception as e:
 # --- Routes FastAPI ---
 @app.post("/analyze")
 async def analyze(request: Request):
-    start_time = time.time()  # ← Début du chronométrage
-
     try:
         data = await request.json()
-        logger.info(f"📥 Données reçues: {len(data.get('data', []))} lignes")
+        logger.info(f"📥 Données reçues: {data}")
+
+        # --- Gestion des deux formats d'input ---
+        if "data" in data and isinstance(data["data"], list):
+            # Format attendu : {"data": [{"Interview": "1", ...}]}
+            input_data = data["data"]
+        else:
+            # Format Make/GS : {"Interview": "1", ...} (un seul dictionnaire)
+            input_data = [data]  # ← Transforme en liste avec un seul élément
 
         if analyzer is None:
             logger.error("❌ Analyseur non initialisé!")
@@ -244,29 +250,24 @@ async def analyze(request: Request):
                 content={"status": "error", "message": "Analyseur non initialisé"}
             )
 
-        results = await analyzer.analyze_batch(data.get("data", []))
-        duration = time.time() - start_time  # ← Calcul de la durée
-
-        logger.info(f"⏱️ Temps d'exécution: {duration:.2f}s pour {len(results)} lignes")
+        results = await analyzer.analyze_batch(input_data)
+        logger.info(f"📤 Résultats: {len(results)} lignes traitées.")
 
         return JSONResponse(content={
             "status": "success",
             "processed": len(results),
             "results": results,
-            "analysis_version": "hybrid_v1",
-            "performance": {  # ← Ajoute les métriques ici
-                "duration_seconds": duration,
-                "lines_processed": len(results),
-                "avg_time_per_line": duration / len(results) if results else 0
-            }
+            "analysis_version": "hybrid_v1"
         })
 
     except Exception as e:
         logger.error(f"❌ Erreur dans /analyze: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": str(e)}
-        )        
+        )     
 # --- Fonction handler pour Vercel ---
 def handler(request):
     from vercel import VercelRequest
