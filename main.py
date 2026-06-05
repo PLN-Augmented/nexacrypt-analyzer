@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import os
 import logging
+import unicodedata
 from typing import List, Dict
 
 # --- Configuration des logs ---
@@ -27,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Classe NexacryptAnalyzer (intégrée directement) ---
+# --- Classe NexacryptAnalyzer (avec normalize_text) ---
 class NexacryptAnalyzer:
     def __init__(self):
         logger.info("🔍 Initialisation de NexacryptAnalyzer...")
@@ -49,25 +50,75 @@ class NexacryptAnalyzer:
         else:
             logger.warning("⚠️ LLM désactivé (clé API manquante).")
 
+    # --- Méthode normalize_text (ton code original) ---
+    def normalize_text(self, text: str) -> str:
+        """Nettoie et normalise un texte pour une comparaison robuste."""
+        if not text:
+            return ""
+
+        # Nettoyage JSON
+        text = text.encode('utf-8', 'ignore').decode('unicode_escape')
+
+        # Suppression des caractères invisibles
+        invisibles = [
+            "\u2028", "\u2029", "\u2026", "\u00A0", "\u200B", "\u200C", "\u200D",
+            "\uFEFF", "\uFFFD"
+        ]
+        for inv in invisibles:
+            text = text.replace(inv, " ")
+
+        # Apostrophes typographiques
+        text = text.replace("’", "'").replace("‘", "'")
+
+        # Guillemets typographiques
+        text = text.replace("“", '"').replace("”", '"')
+
+        # Normalisation Unicode
+        text = unicodedata.normalize("NFKD", text)
+
+        # Suppression des accents
+        text = "".join(c for c in text if not unicodedata.combining(c))
+
+        return text.lower().strip()
+
+    # --- Setup des prompts LLM ---
     def _setup_prompts(self):
         self.risk_prompt = ChatPromptTemplate.from_template(RISK_PROMPT_TEMPLATE)
         self.risk_chain = self.risk_prompt | self.llm | StrOutputParser()
 
+    # --- Analyse basée sur des règles ---
     def rule_based_analysis(self, row: Dict) -> Dict:
-        text = row.get("Texte", "").lower()
+        raw_text = row.get("Texte", "")
+        text = self.normalize_text(raw_text)
+
+        # Debug : afficher le texte normalisé (optionnel)
+        logger.info(f"📄 Texte normalisé: {text[:50]}...")
+
         components = [c for c in self.COMPONENTS if c in text]
         risks = [
             name for name, patterns in self.RISK_CATEGORIES.items()
-            if any(p in text for p in patterns)
+            if any(self.normalize_text(p) in text for p in patterns)
         ]
+
+        # Calcul de la sévérité
+        severity = ""
+        if risks:
+            if "Security Risk" in risks:
+                severity = "HIGH"
+            elif "Backup Risk" in risks:
+                severity = "MEDIUM"
+            else:
+                severity = "LOW"
+
         return {
             "components": components,
             "risks_rule": risks,
-            "severity_rule": "HIGH" if risks else "MEDIUM"
+            "severity_rule": severity
         }
 
+    # --- Analyse LLM ---
     async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
-        logger.info(f"🔍 Texte à analyser: {text[:50]}...")
+        logger.info(f"🔍 Texte à analyser par LLM: {text[:50]}...")
         if not self.llm_enabled:
             logger.warning("⚠️ LLM désactivé, analyse annulée.")
             return []
@@ -94,7 +145,7 @@ class NexacryptAnalyzer:
             logger.info(f"📝 Texte extrait: {result_text}")
 
             if result_text.lower() in ["aucun", "none", "rien", ""]:
-                logger.info("✅ Aucun risque détecté.")
+                logger.info("✅ Aucun risque détecté par le LLM.")
                 return []
 
             # Parsing manuel des risques
@@ -106,13 +157,14 @@ class NexacryptAnalyzer:
             if not detected_risks:
                 detected_risks = ["Inconnu"]
 
-            logger.info(f"🎯 Risques détectés: {detected_risks}")
+            logger.info(f"🎯 Risques détectés par LLM: {detected_risks}")
             return detected_risks
 
         except Exception as e:
             logger.error(f"❌ Erreur dans llm_analysis: {e}")
             return ["Erreur LLM"]
 
+    # --- Analyse hybride (règles + LLM) ---
     async def analyze_row(self, row: Dict) -> Dict:
         text = row.get("Texte", "")
         logger.info(f"📄 Analyse de la ligne: {row.get('Interview', 'N/A')}")
@@ -140,13 +192,30 @@ class NexacryptAnalyzer:
             **row,
             "components": rule_result["components"],
             "risks": all_risks,
-            "severity": "HIGH" if "HIGH" in [r for r in all_risks if r in self.RISK_CATEGORIES] else "MEDIUM",
+            "severity": rule_result["severity_rule"] if rule_result["severity_rule"] else "MEDIUM",
             "analysis_type": method,
             "note": f"Analyse {method}"
         }
 
+    # --- Analyse par lots ---
     async def analyze_batch(self, data: List[Dict]) -> List[Dict]:
-        return [await self.analyze_row(row) for row in data]
+        results = []
+        for row in data:
+            try:
+                result = await self.analyze_row(row)
+                results.append(result)
+            except Exception as e:
+                logger.error(f"🔥 ERREUR analyze_row: {e}")
+                results.append({
+                    **row,
+                    "error": str(e),
+                    "components": [],
+                    "risks": ["Erreur"],
+                    "severity": "HIGH",
+                    "analysis_type": "error",
+                    "note": f"Erreur: {str(e)}"
+                })
+        return results
 
 # --- Initialisation de l'analyseur ---
 try:
@@ -174,7 +243,7 @@ async def analyze(request: Request):
                 content={"status": "error", "message": "Analyseur non initialisé"}
             )
 
-        results = await analyzer.analyze_batch([row for row in data.get("data", [])])
+        results = await analyzer.analyze_batch(data.get("data", []))
         logger.info(f"📤 Résultats: {len(results)} lignes traitées.")
         return JSONResponse(content={
             "status": "success",
