@@ -260,5 +260,5 @@ async def analyze(request: Request):
 
 # --- Fonction handler pour Vercel ---
 def handler(request):
-    from vercel_python import VercelRequest
-    return app(VercelRequest(request))
+    from vercel import VercelRequest
+    return app(VercelRequest(request))    
