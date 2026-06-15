@@ -12,6 +12,8 @@ import os
 import logging
 import unicodedata
 from typing import List, Dict
+import json
+from typing import Dict, List, Optional
 
 # --- Configuration des logs ---
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +30,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Définition des poids pour chaque risque
+RISK_WEIGHTS = {
+    "Knowledge Concentration": 3,
+    "Documentation Gap": 2,
+    "Backup Risk": 2,
+    "Security Risk": 3,
+    "Governance Risk": 2,
+}
 
 # --- Classe NexacryptAnalyzer (avec normalize_text) ---
 class NexacryptAnalyzer:
