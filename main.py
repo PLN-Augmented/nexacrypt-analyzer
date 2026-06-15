@@ -148,7 +148,7 @@ class NexacryptAnalyzer:
             # Vérifier que la réponse commence par '{' et se termine par '}'
             if not (result_text.startswith('{') and result_text.endswith('}')):
                 logger.warning(f"⚠️ Réponse LLM non conforme (format attendu : JSON): {result_text}")
-                # Fallback : pattern-matching
+                # Fallback : utiliser le pattern-matching
                 detected_risks = []
                 normalized_text = self.normalize_text(result_text)
                 for category, patterns in self.RISK_CATEGORIES.items():
@@ -160,9 +160,10 @@ class NexacryptAnalyzer:
                     "explanation": "Réponse LLM non conforme (format attendu : JSON). Fallback en pattern-matching."
                 }
 
-            # Parser le JSON
+            # Essayer de parser le JSON
             try:
                 parsed_result = json.loads(result_text)
+                # Valider la structure du JSON
                 if not isinstance(parsed_result, dict):
                     raise ValueError("Réponse LLM non conforme : doit être un dictionnaire JSON.")
                 if "risks" not in parsed_result:
@@ -170,6 +171,7 @@ class NexacryptAnalyzer:
                 if not isinstance(parsed_result["risks"], list):
                     raise ValueError("Réponse LLM non conforme : 'risks' doit être une liste.")
 
+                # Valider les autres champs
                 confidence = parsed_result.get("confidence", "medium")
                 if confidence not in ["high", "medium", "low"]:
                     confidence = "medium"
@@ -183,7 +185,7 @@ class NexacryptAnalyzer:
 
             except json.JSONDecodeError as e:
                 logger.warning(f"⚠️ Réponse LLM non valide (JSON invalide): {e}")
-                # Fallback : pattern-matching
+                # Fallback : utiliser le pattern-matching
                 detected_risks = []
                 normalized_text = self.normalize_text(result_text)
                 for category, patterns in self.RISK_CATEGORIES.items():
@@ -197,10 +199,10 @@ class NexacryptAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Erreur dans llm_analysis: {e}")
-            import traceback  # ✅ 4 espaces ici
+            import traceback
             traceback.print_exc()
             return {"risks": [], "confidence": "low", "explanation": f"Erreur LLM: {str(e)}"}
-            
+        
     # --- Sévérité ---      
     def calculate_severity(self, all_risks: List[str]) -> str:
         """Calcule la sévérité en fonction du score cumulatif des risques."""
