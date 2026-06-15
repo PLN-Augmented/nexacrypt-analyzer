@@ -1,5 +1,5 @@
 # config/categories.py
-COMPONENTS = ["soulcrypt", "soulbleed", "serveurs", "sauvegardes", "monitoring", "dex", "dat", "raid", "openssl"]
+COMPONENTS = ["nexacrypt engine", "nexacrypt core v2", "nexacrypt core v3", "serveurs", "sauvegardes", "monitoring", "clés de chiffrement", "certificats", "dex", "dat", "raid", "openssl"]
 
 RISK_CATEGORIES = {
     "Knowledge Concentration": [
@@ -18,7 +18,7 @@ RISK_CATEGORIES = {
     ],
     "Security Risk": [
         "vulnérabilité", "faille", "heartbleed", "chiffrement", "sécurité", "compromis",
-        "sensibles", "soulcrypt", "soulbleed"
+        "sensibles"
     ],
     "Governance Risk": [
         "pas de budget", "pas de plan", "astreintes", "part en retraite", "seul à connaître",
