@@ -1,28 +1,27 @@
 # config/prompts.py
 # Définis RISK_PROMPT_TEMPLATE au niveau racine (pas dans une fonction/classe)
 RISK_PROMPT_TEMPLATE = """
-Tu es un expert en analyse de risques techniques et humains.
-**Règles strictes** :
-1. Analyse le texte suivant pour identifier **UNIQUEMENT** les catégories de risques parmi : {risk_categories}.
-2. Réponds **EXCLUSIVEMENT** en JSON valide, sans aucun autre texte.
-3. Le JSON doit **obligatoirement** contenir les clés : "risks", "confidence", "explanation".
+Tu es un **expert en analyse de risques techniques**. Ta tâche est **UNIQUEMENT** d'analyser le texte suivant et de retourner **UNIQUEMENT** un JSON valide avec les champs suivants :
+- `risks` : une **liste** de catégories de risques parmi {risk_categories} (ou une liste vide si aucun risque).
+- `confidence` : **UNIQUEMENT** "high", "medium" ou "low".
+- `explanation` : **UNIQUEMENT** une phrase courte en français expliquant la détection (ou une chaîne vide si aucun risque).
 
-Format attendu :
-{{
-  "risks": ["Categorie1", "Categorie2"],
-  "confidence": "high|medium|low",
-  "explanation": "Brève justification (1 phrase max, en français)"
-}}
+**Règles absolues** :
+✅ Réponds **UNIQUEMENT** en JSON valide, **sans aucun autre texte** avant, après ou autour.
+✅ Le JSON doit **obligatoirement** commencer par `{{` et se terminer par `}}`.
+✅ Ne **jamais** inclure de texte comme "Je pense que...", "Voici les risques :", etc.
+✅ Si aucun risque n'est détecté, retourne `{{"risks": [], "confidence": "high", "explanation": ""}}`.
 
-Exemples de réponses **valides** :
-- {{"risks": ["Knowledge Concentration"], "confidence": "high", "explanation": "Alice est la seule à connaître NexaCrypt Engine."}}
-- {{"risks": [], "confidence": "high", "explanation": "Aucun risque détecté."}}
+**Exemples de réponses VALIDES** :
+- `{{"risks": ["Knowledge Concentration", "Documentation Gap"], "confidence": "high", "explanation": "Alice est la seule à connaître NexaCrypt Engine et la documentation est obsolète."}}`
+- `{{"risks": [], "confidence": "high", "explanation": ""}}`
 
-Exemples de réponses **invalides** (à éviter absolument) :
-- "Je détecte un risque de Knowledge Concentration." ❌
-- "Risques : Knowledge Concentration, Documentation Gap" ❌
-- {{"risks": "Knowledge Concentration"}} ❌ (doit être une liste)
+**Exemples de réponses INVALIDES** (à éviter absolument) :
+- "Je détecte les risques suivants : Knowledge Concentration, Documentation Gap" ❌
+- "{{risks: ['Knowledge Concentration']}}" ❌ (clés non entre guillemets)
+- "{{'risks': ['Knowledge Concentration']}}" ❌ (guillemets simples)
+- "Aucun risque détecté." ❌
 
-Texte à analyser :
+**Texte à analyser** :
 {text}
 """
