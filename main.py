@@ -96,7 +96,7 @@ class NexacryptAnalyzer:
     # --- Setup des prompts LLM ---
     def _setup_prompts(self):
         self.risk_prompt = ChatPromptTemplate.from_template(RISK_PROMPT_TEMPLATE)
-        self.risk_chain = self.risk_prompt | self.llm | StrOutputParser()
+        self.risk_chain = self.risk_prompt | self.llm  # On enlève StrOutputParser pour récupérer le JSON brut
 
     # --- Analyse basée sur des règles ---
     def rule_based_analysis(self, row: Dict) -> Dict:
@@ -119,12 +119,13 @@ class NexacryptAnalyzer:
             "risks_rule": risks,
             "severity_rule": severity
         }
-    # --- Analyse LLM ---
-    async def llm_analysis(self, text: str, risk_categories: List[str]) -> List[str]:
+    # --- Analyse LLM ---async
+    def llm_analysis(self, text: str, risk_categories: List[str]) -> Dict:
+        """Analyse le texte avec le LLM et retourne un dictionnaire structuré."""
         logger.info(f"🔍 Texte à analyser par LLM: {text[:100]}...")
         if not self.llm_enabled:
             logger.warning("⚠️ LLM désactivé, analyse annulée.")
-            return []
+            return {"risks": [], "confidence": "low", "explanation": "LLM désactivé"}
 
         try:
             result = await self.risk_chain.ainvoke({
@@ -133,46 +134,63 @@ class NexacryptAnalyzer:
             })
             logger.info(f"🤖 Réponse brute du LLM: {result}")
 
-            # Parsing robuste
-            if isinstance(result, dict):
-                result_text = (
-                    result.get("output", "") or
-                    result.get("text", "") or
-                    result.get("content", "") or
-                    str(result)
-                )
+            # Récupérer le contenu de la réponse
+            if hasattr(result, 'content'):
+                result_text = result.content
+            elif isinstance(result, dict):
+                result_text = result.get("output", "") or result.get("text", "") or result.get("content", "") or str(result)
             else:
                 result_text = str(result)
 
-            result_text = result_text.strip().lower()
             logger.info(f"📝 Texte extrait: {result_text}")
 
-            if result_text in ["aucun", "none", "rien", ""]:
-                logger.info("✅ Aucun risque détecté par le LLM.")
-                return []
-
-            # Parsing amélioré : cherche chaque catégorie dans la réponse
-            detected_risks = []
-            for category in risk_categories:
-                # Normalise la catégorie pour la comparaison (ex: "Knowledge Concentration" → "knowledgeconcentration")
-                normalized_category = self.normalize_text(category)
-                # Cherche la catégorie normalisée dans le texte normalisé
-                if normalized_category in result_text:
-                    detected_risks.append(category)
-
-            if not detected_risks:
-                detected_risks = ["Inconnu"]
-                logger.warning("⚠️ AUCUN RISQUE DÉTECTÉ PAR LLM !")
-
-            logger.info(f"🎯 Risques détectés par LLM: {detected_risks}")
-            return detected_risks
+            # Essayer de parser le JSON
+            try:
+                parsed_result = json.loads(result_text)
+                # Valider que le JSON contient bien les champs attendus
+                if "risks" in parsed_result:
+                    return {
+                        "risks": parsed_result["risks"],
+                        "confidence": parsed_result.get("confidence", "medium"),
+                        "explanation": parsed_result.get("explanation", "")
+                    }
+                else:
+                    logger.warning("⚠️ Réponse LLM non conforme (champ 'risks' manquant).")
+                    return {"risks": [], "confidence": "low", "explanation": "Réponse LLM non conforme"}
+            except json.JSONDecodeError:
+                logger.warning("⚠️ Réponse LLM non valide (JSON invalide).")
+                # Fallback : essayer de détecter les risques avec du pattern-matching (ancienne méthode)
+                detected_risks = []
+                normalized_text = self.normalize_text(result_text)
+                for category in risk_categories:
+                    normalized_category = self.normalize_text(category)
+                    if normalized_category in normalized_text:
+                        detected_risks.append(category)
+                return {
+                    "risks": detected_risks,
+                    "confidence": "low",
+                    "explanation": "Réponse LLM non valide, fallback en pattern-matching"
+                }
 
         except Exception as e:
             logger.error(f"❌ Erreur dans llm_analysis: {e}")
             import traceback
             traceback.print_exc()
-            return ["Erreur LLM"]
-            
+            return {"risks": [], "confidence": "low", "explanation": f"Erreur LLM: {str(e)}"}
+
+    def calculate_severity(self, all_risks: List[str]) -> str:
+        """Calcule la sévérité en fonction du score cumulatif des risques."""
+        score = sum(RISK_WEIGHTS.get(risk, 1) for risk in all_risks)
+
+        if score >= 6:
+            return "CRITICAL"
+        elif score >= 4:
+            return "HIGH"
+        elif score >= 2:
+            return "MEDIUM"
+        else:
+            return "LOW"
+    
     # --- Analyse hybride (règles + LLM) ---
     async def analyze_row(self, row: Dict) -> Dict:
         text = row.get("Texte", "")
@@ -186,8 +204,13 @@ class NexacryptAnalyzer:
         logger.info(f"USE_LLM ? {use_llm}")
 
         llm_risks = []
+        llm_confidence = "low"
+        llm_explanation = ""
         if use_llm:
-            llm_risks = await self.llm_analysis(text, list(self.RISK_CATEGORIES.keys()))
+            llm_result = await self.llm_analysis(text, list(self.RISK_CATEGORIES.keys()))
+            llm_risks = llm_result.get("risks", [])
+            llm_confidence = llm_result.get("confidence", "low")
+            llm_explanation = llm_result.get("explanation", "")
             logger.info(f"🎯 Risques (LLM): {llm_risks}")
 
         all_risks = list(set(rule_risks + llm_risks))  # Combinaison hybride
@@ -197,15 +220,17 @@ class NexacryptAnalyzer:
             all_risks = ["Inconnu"]
             logger.warning("⚠️ Aucun risque détecté, valeur par défaut appliquée.")
 
-        # Calcul de la sévérité (basée sur tous les risques)
-        severity = "HIGH" if "Security Risk" in all_risks else "MEDIUM" if "Backup Risk" in all_risks else "LOW"
+        # Calcul de la sévérité avec le score cumulatif
+        severity = self.calculate_severity(all_risks)
 
         return {
             **row,
             "components": rule_result["components"],
-            "risks": all_risks,  # ← Tous les risques combinés
-            "risks_rule": rule_risks,  # ←  Risques détectés par les règles
-            "risks_llm": llm_risks,  # ←  Risques détectés par le LLM
+            "risks": all_risks,
+            "risks_rule": rule_risks,
+            "risks_llm": llm_risks,
+            "llm_confidence": llm_confidence,  # Nouveau champ
+            "llm_explanation": llm_explanation,  # Nouveau champ
             "severity": severity,
             "analysis_type": method,
             "note": f"Analyse {method}"
