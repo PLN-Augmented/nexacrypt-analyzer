@@ -96,7 +96,7 @@ class NexacryptAnalyzer:
     # --- Setup des prompts LLM ---
     def _setup_prompts(self):
         self.risk_prompt = ChatPromptTemplate.from_template(RISK_PROMPT_TEMPLATE)
-        self.risk_chain = self.risk_prompt | self.llm  # On enlève StrOutputParser pour récupérer le JSON brut
+        self.risk_chain = self.risk_prompt | self.llm  
 
     # --- Analyse basée sur des règles ---
     def rule_based_analysis(self, row: Dict) -> Dict:
@@ -119,8 +119,8 @@ class NexacryptAnalyzer:
             "risks_rule": risks,
             "severity_rule": severity
         }
-    # --- Analyse LLM ---async
-    def llm_analysis(self, text: str, risk_categories: List[str]) -> Dict:
+    # --- Analyse LLM ---
+    async def llm_analysis(self, text: str, risk_categories: List[str]) -> Dict:
         """Analyse le texte avec le LLM et retourne un dictionnaire structuré."""
         logger.info(f"🔍 Texte à analyser par LLM: {text[:100]}...")
         if not self.llm_enabled:
