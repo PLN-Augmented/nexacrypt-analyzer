@@ -1,5 +1,5 @@
 # config/categories.py
-COMPONENTS = ["nexacrypt engine", "nexacrypt core v2", "nexacrypt core v3", "serveurs", "sauvegardes", "monitoring", "clés de chiffrement", "certificats", "dex", "dat", "raid", "openssl"]
+COMPONENTS = ["nexacrypt engine", "nexacrypt core v2", "nexacrypt core v3", "nexatrace", "serveurs", "sauvegardes", "monitoring", "moteur de chiffrement", "clés de chiffrement", "certificats", "dex", "dat", "raid", "openssl"]
 
 RISK_CATEGORIES = {
     "Knowledge Concentration": [
