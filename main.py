@@ -120,46 +120,35 @@ class NexacryptAnalyzer:
             "severity_rule": severity
         }
     # --- Analyse LLM ---
-    async def llm_analysis(self, text: str, risk_categories: List[str]) -> Dict:
-        """Analyse le texte avec le LLM et retourne un dictionnaire structuré."""
-        logger.info(f"🔍 Texte à analyser par LLM: {text[:100]}...")
-        if not self.llm_enabled:
-            logger.warning("⚠️ LLM désactivé, analyse annulée.")
-            return {"risks": [], "confidence": "low", "explanation": "LLM désactivé"}
+async def llm_analysis(self, text: str, risk_categories: List[str]) -> Dict:
+    logger.info(f"🔍 Texte à analyser par LLM: {text[:100]}...")
+    if not self.llm_enabled:
+        logger.warning("⚠️ LLM désactivé, analyse annulée.")
+        return {"risks": [], "confidence": "low", "explanation": "LLM désactivé"}
 
-        try:
-            result = await self.risk_chain.ainvoke({
-                "risk_categories": ", ".join(risk_categories),
-                "text": text
-            })
-            logger.info(f"🤖 Réponse brute du LLM: {result}")
+    try:
+        result = await self.risk_chain.ainvoke({
+            "risk_categories": ", ".join(risk_categories),
+            "text": text
+        })
 
-            # Récupérer le contenu de la réponse
-            if hasattr(result, 'content'):
-                result_text = result.content
-            elif isinstance(result, dict):
-                result_text = result.get("output", "") or result.get("text", "") or result.get("content", "") or str(result)
-            else:
-                result_text = str(result)
+        # Récupérer le contenu de la réponse
+        if hasattr(result, 'content'):
+            result_text = result.content
+        elif isinstance(result, dict):
+            result_text = result.get("output", "") or result.get("text", "") or result.get("content", "") or str(result)
+        else:
+            result_text = str(result)
 
-            logger.info(f"📝 Texte extrait: {result_text}")
+        logger.info(f"🤖 Réponse brute du LLM: {result_text}")
 
-            # Essayer de parser le JSON
-            try:
-                parsed_result = json.loads(result_text)
-                # Valider que le JSON contient bien les champs attendus
-                if "risks" in parsed_result:
-                    return {
-                        "risks": parsed_result["risks"],
-                        "confidence": parsed_result.get("confidence", "medium"),
-                        "explanation": parsed_result.get("explanation", "")
-                    }
-                else:
-                    logger.warning("⚠️ Réponse LLM non conforme (champ 'risks' manquant).")
-                    return {"risks": [], "confidence": "low", "explanation": "Réponse LLM non conforme"}
-           except json.JSONDecodeError:
-            logger.warning("⚠️ Réponse LLM non valide (JSON invalide).")
-            # Fallback : utiliser la même logique que rule_based_analysis
+        # Nettoyer la réponse (supprimer les espaces ou sauts de ligne avant/après)
+        result_text = result_text.strip()
+
+        # Vérifier que la réponse commence par '{' et se termine par '}'
+        if not (result_text.startswith('{') and result_text.endswith('}')):
+            logger.warning(f"⚠️ Réponse LLM non conforme (ne commence pas par {{ ou ne se termine pas par }}): {result_text}")
+            # Fallback : utiliser le pattern-matching
             detected_risks = []
             normalized_text = self.normalize_text(result_text)
             for category, patterns in self.RISK_CATEGORIES.items():
@@ -168,15 +157,55 @@ class NexacryptAnalyzer:
             return {
                 "risks": detected_risks,
                 "confidence": "low",
-                "explanation": "Réponse LLM non valide, fallback en pattern-matching avec les mêmes règles que l'analyse basée sur les règles."
+                "explanation": f"Réponse LLM non conforme (format attendu : JSON). Fallback en pattern-matching."
             }
 
-        except Exception as e:
-            logger.error(f"❌ Erreur dans llm_analysis: {e}")
-            import traceback
-            traceback.print_exc()
-            return {"risks": [], "confidence": "low", "explanation": f"Erreur LLM: {str(e)}"}
+        # Essayer de parser le JSON
+        try:
+            parsed_result = json.loads(result_text)
+            # Valider que le JSON contient bien les champs attendus
+            if not isinstance(parsed_result, dict):
+                raise ValueError("Réponse LLM non conforme : doit être un dictionnaire JSON.")
 
+            if "risks" not in parsed_result:
+                raise ValueError("Réponse LLM non conforme : champ 'risks' manquant.")
+
+            if not isinstance(parsed_result["risks"], list):
+                raise ValueError("Réponse LLM non conforme : 'risks' doit être une liste.")
+
+            # Valider les autres champs (optionnels mais recommandés)
+            confidence = parsed_result.get("confidence", "medium")
+            if confidence not in ["high", "medium", "low"]:
+                confidence = "medium"
+
+            explanation = parsed_result.get("explanation", "")
+
+            return {
+                "risks": parsed_result["risks"],
+                "confidence": confidence,
+                "explanation": explanation
+            }
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"⚠️ Réponse LLM non valide (JSON invalide): {e}")
+            # Fallback : utiliser le pattern-matching
+            detected_risks = []
+            normalized_text = self.normalize_text(result_text)
+            for category, patterns in self.RISK_CATEGORIES.items():
+                if any(self.normalize_text(p) in normalized_text for p in patterns):
+                    detected_risks.append(category)
+            return {
+                "risks": detected_risks,
+                "confidence": "low",
+                "explanation": f"Réponse LLM non valide (JSON invalide). Fallback en pattern-matching."
+            }
+
+    except Exception as e:
+        logger.error(f"❌ Erreur dans llm_analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"risks": [], "confidence": "low", "explanation": f"Erreur LLM: {str(e)}"}
+        
     def calculate_severity(self, all_risks: List[str]) -> str:
         """Calcule la sévérité en fonction du score cumulatif des risques."""
         score = sum(RISK_WEIGHTS.get(risk, 1) for risk in all_risks)
