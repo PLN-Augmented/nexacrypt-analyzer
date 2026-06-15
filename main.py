@@ -157,20 +157,19 @@ class NexacryptAnalyzer:
                 else:
                     logger.warning("⚠️ Réponse LLM non conforme (champ 'risks' manquant).")
                     return {"risks": [], "confidence": "low", "explanation": "Réponse LLM non conforme"}
-            except json.JSONDecodeError:
-                logger.warning("⚠️ Réponse LLM non valide (JSON invalide).")
-                # Fallback : essayer de détecter les risques avec du pattern-matching (ancienne méthode)
-                detected_risks = []
-                normalized_text = self.normalize_text(result_text)
-                for category in risk_categories:
-                    normalized_category = self.normalize_text(category)
-                    if normalized_category in normalized_text:
-                        detected_risks.append(category)
-                return {
-                    "risks": detected_risks,
-                    "confidence": "low",
-                    "explanation": "Réponse LLM non valide, fallback en pattern-matching"
-                }
+           except json.JSONDecodeError:
+            logger.warning("⚠️ Réponse LLM non valide (JSON invalide).")
+            # Fallback : utiliser la même logique que rule_based_analysis
+            detected_risks = []
+            normalized_text = self.normalize_text(result_text)
+            for category, patterns in self.RISK_CATEGORIES.items():
+                if any(self.normalize_text(p) in normalized_text for p in patterns):
+                    detected_risks.append(category)
+            return {
+                "risks": detected_risks,
+                "confidence": "low",
+                "explanation": "Réponse LLM non valide, fallback en pattern-matching avec les mêmes règles que l'analyse basée sur les règles."
+            }
 
         except Exception as e:
             logger.error(f"❌ Erreur dans llm_analysis: {e}")
