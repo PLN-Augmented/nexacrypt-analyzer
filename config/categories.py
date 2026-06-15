@@ -4,7 +4,7 @@ COMPONENTS = ["nexacrypt engine", "nexacrypt core v2", "nexacrypt core v3", "nex
 RISK_CATEGORIES = {
     "Knowledge Concentration": [
         "seule", "seul", "dans ma tête", "personne d'autre", "irremplaçable", "spof",
-        "personne", "connaît", "comprendre", "complexe", "peur de casser", "annuler la mise en prod",
+        "personne", "connaît", "comprendre", "complexe", "peur de casser", "annuler la mise en prod", "toujours moi qu'on appelle","personne ne saurait",
         "touché", "touchée", "évolutions", "toutes les évolutions", "5 ans", "conçu il y a"
     ],
     "Documentation Gap": [
@@ -14,20 +14,20 @@ RISK_CATEGORIES = {
     "Backup Risk": [
         "sauvegarde", "restauration", "jamais testé", "backup", "backups", "corrompues",
         "45 minutes", "démarrer", "SLA", "High", "serveurs dédiés", "2 en prod", "1 en backup",
-        "matériel vieux", "disques", "fatigue", "si les 2 serveurs prod tombent"
+        "matériel vieux", "disques", "fatigue", "si les 2 serveurs prod tombent", "rotation des clés", "mise en production reportée", "régressions"
     ],
     "Security Risk": [
         "vulnérabilité", "faille", "heartbleed", "chiffrement", "sécurité", "compromis",
-        "sensibles"
+        "sensibles", "incident de chiffrement", "conséquences importantes", "chiffrement complexe"
     ],
     "Governance Risk": [
         "pas de budget", "pas de plan", "astreintes", "part en retraite", "seul à connaître",
-        "Dave", "retraite", "3 mois", "après son départ"
+        "Dave", "retraite", "3 mois", "après son départ", "officieusement", "non officiel"
     ],
     "Connaissances Tacites": [
-        "connaissances implicites", "mémoire non formalisée", "souvenir d'un incident", "choix techniques non documentés"
+        "connaissances implicites", "mémoire non formalisée", "souvenir d'un incident", "choix techniques non documentés",  "connaissances accumulées", "sait immédiatement"
     ],
     "Dépendance Humaine": [
-        "toujours moi qu'on appelle", "personne ne saurait", "dépend de moi"   
+        "toujours moi qu'on appelle", "personne ne saurait", "dépend de moi", "c'est toujours moi", "on m'appelle"
     ] 
 }
