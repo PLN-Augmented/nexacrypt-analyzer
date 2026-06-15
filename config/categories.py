@@ -23,5 +23,11 @@ RISK_CATEGORIES = {
     "Governance Risk": [
         "pas de budget", "pas de plan", "astreintes", "part en retraite", "seul à connaître",
         "Dave", "retraite", "3 mois", "après son départ"
-    ]
+    ],
+    "Connaissances Tacites": [
+        "connaissances implicites", "mémoire non formalisée", "souvenir d'un incident", "choix techniques non documentés"
+    ],
+    "Dépendance Humaine": [
+        "toujours moi qu'on appelle", "personne ne saurait", "dépend de moi"   
+    ] 
 }
