@@ -3,6 +3,20 @@
 RISK_PROMPT_TEMPLATE = """
 Tu es un expert en analyse de risques techniques.
 Analyse le texte suivant et identifie UNIQUEMENT les catégories de risques parmi : {risk_categories}.
-Réponds avec une liste de catégories séparées par des virgules, ou 'Aucun' si aucun risque.
-Texte : {text}
+Réponds **UNIQUEMENT** en JSON valide, au format :
+{{
+  "risks": ["Categorie1", "Categorie2"],
+  "confidence": "high|medium|low",
+  "explanation": "Brève justification (1 phrase max)"
+}}
+
+Exemple de réponse attendue :
+{{
+  "risks": ["Knowledge Concentration", "Documentation Gap"],
+  "confidence": "high",
+  "explanation": "Le texte mentionne une dépendance unique à Alice et une documentation obsolète."
+}}
+
+Texte à analyser :
+{text}
 """
